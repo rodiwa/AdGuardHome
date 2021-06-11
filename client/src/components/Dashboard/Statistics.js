@@ -5,6 +5,7 @@ import { withTranslation, Trans } from 'react-i18next';
 
 import StatsCard from './StatsCard';
 import { getPercent, normalizeHistory } from '../../helpers/helpers';
+import { RESPONSE_FILTER } from '../../helpers/constants';
 
 const getNormalizedHistory = (data, interval, id) => [
     { data: normalizeHistory(data, interval), id },
@@ -35,7 +36,7 @@ const Statistics = ({
                 total={numBlockedFiltering}
                 lineData={getNormalizedHistory(blockedFiltering, interval, 'blockedFiltering')}
                 percent={getPercent(numDnsQueries, numBlockedFiltering)}
-                title={<Trans components={[<Link to="logs?response_status=filtered" key="0">link</Link>]}>blocked_by</Trans>}
+                title={<Trans components={[<Link to={`logs?response_status=${RESPONSE_FILTER.FILTERED.QUERY}`} key="0">link</Link>]}>blocked_by</Trans>}
                 color="red"
             />
         </div>
@@ -48,7 +49,7 @@ const Statistics = ({
                     'replacedSafebrowsing',
                 )}
                 percent={getPercent(numDnsQueries, numReplacedSafebrowsing)}
-                title={<Link to="logs?response_status=blocked_safebrowsing"><Trans>stats_malware_phishing</Trans></Link>}
+                title={<Link to={`logs?response_status=${RESPONSE_FILTER.BLOCKED_THREATS.QUERY}`}><Trans>stats_malware_phishing</Trans></Link>}
                 color="green"
             />
         </div>
@@ -57,7 +58,7 @@ const Statistics = ({
                 total={numReplacedParental}
                 lineData={getNormalizedHistory(replacedParental, interval, 'replacedParental')}
                 percent={getPercent(numDnsQueries, numReplacedParental)}
-                title={<Link to="logs?response_status=blocked_parental"><Trans>stats_adult</Trans></Link>}
+                title={<Link to={`logs?response_status=${RESPONSE_FILTER.BLOCKED_ADULT_WEBSITES.QUERY}`}><Trans>stats_adult</Trans></Link>}
                 color="yellow"
             />
         </div>
