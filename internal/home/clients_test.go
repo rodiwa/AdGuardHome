@@ -172,25 +172,25 @@ func TestClients(t *testing.T) {
 	})
 }
 
-func TestClientsWhois(t *testing.T) {
+func TestClientsWHOIS(t *testing.T) {
 	clients := clientsContainer{
 		testing: true,
 	}
 	clients.Init(nil, nil, nil)
-	whois := &RuntimeClientWhoisInfo{
+	whois := &RuntimeClientWHOISInfo{
 		Country: "AU",
 		Orgname: "Example Org",
 	}
 
 	t.Run("new_client", func(t *testing.T) {
-		clients.SetWhoisInfo("1.1.1.255", whois)
+		clients.SetWHOISInfo("1.1.1.255", whois)
 
 		require.NotNil(t, clients.ipToRC["1.1.1.255"])
 
 		h := clients.ipToRC["1.1.1.255"]
 		require.NotNil(t, h)
 
-		assert.Equal(t, h.WhoisInfo, whois)
+		assert.Equal(t, h.WHOISInfo, whois)
 	})
 
 	t.Run("existing_auto-client", func(t *testing.T) {
@@ -198,13 +198,13 @@ func TestClientsWhois(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, ok)
 
-		clients.SetWhoisInfo("1.1.1.1", whois)
+		clients.SetWHOISInfo("1.1.1.1", whois)
 
 		require.NotNil(t, clients.ipToRC["1.1.1.1"])
 		h := clients.ipToRC["1.1.1.1"]
 		require.NotNil(t, h)
 
-		assert.Equal(t, h.WhoisInfo, whois)
+		assert.Equal(t, h.WHOISInfo, whois)
 	})
 
 	t.Run("can't_set_manually-added", func(t *testing.T) {
@@ -215,7 +215,7 @@ func TestClientsWhois(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, ok)
 
-		clients.SetWhoisInfo("1.1.1.2", whois)
+		clients.SetWHOISInfo("1.1.1.2", whois)
 		require.Nil(t, clients.ipToRC["1.1.1.2"])
 		assert.True(t, clients.Del("client1"))
 	})
@@ -243,6 +243,8 @@ func TestClientsAddExisting(t *testing.T) {
 	})
 
 	t.Run("complicated", func(t *testing.T) {
+		var err error
+
 		testIP := net.IP{1, 2, 3, 4}
 
 		// First, init a DHCP server with a single static lease.
@@ -258,10 +260,12 @@ func TestClientsAddExisting(t *testing.T) {
 			},
 		}
 
-		clients.dhcpServer = dhcpd.Create(config)
+		clients.dhcpServer, err = dhcpd.Create(config)
+		require.NoError(t, err)
+
 		t.Cleanup(func() { _ = os.Remove("leases.db") })
 
-		err := clients.dhcpServer.AddStaticLease(dhcpd.Lease{
+		err = clients.dhcpServer.AddStaticLease(&dhcpd.Lease{
 			HWAddr:   net.HardwareAddr{0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA},
 			IP:       testIP,
 			Hostname: "testhost",

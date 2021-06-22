@@ -279,6 +279,34 @@ func TestServer(t *testing.T) {
 	}
 }
 
+func TestServer_timeout(t *testing.T) {
+	const timeout time.Duration = time.Second
+
+	t.Run("custom", func(t *testing.T) {
+		srvConf := &ServerConfig{
+			UpstreamTimeout: timeout,
+		}
+
+		s, err := NewServer(DNSCreateParams{})
+		require.NoError(t, err)
+
+		err = s.Prepare(srvConf)
+		require.NoError(t, err)
+
+		assert.Equal(t, timeout, s.conf.UpstreamTimeout)
+	})
+
+	t.Run("default", func(t *testing.T) {
+		s, err := NewServer(DNSCreateParams{})
+		require.NoError(t, err)
+
+		err = s.Prepare(nil)
+		require.NoError(t, err)
+
+		assert.Equal(t, DefaultTimeout, s.conf.UpstreamTimeout)
+	})
+}
+
 func TestServerWithProtectionDisabled(t *testing.T) {
 	s := createTestServer(t, &filtering.Config{}, ServerConfig{
 		UDPListenAddrs: []*net.UDPAddr{{}},
@@ -492,6 +520,7 @@ func TestBlockedRequest(t *testing.T) {
 		TCPListenAddrs: []*net.TCPAddr{{}},
 		FilteringConfig: FilteringConfig{
 			ProtectionEnabled: true,
+			BlockingMode:      BlockingModeDefault,
 		},
 	}
 	s := createTestServer(t, &filtering.Config{}, forwardConf, nil)
@@ -594,6 +623,7 @@ func TestBlockCNAME(t *testing.T) {
 		TCPListenAddrs: []*net.TCPAddr{{}},
 		FilteringConfig: FilteringConfig{
 			ProtectionEnabled: true,
+			BlockingMode:      BlockingModeDefault,
 		},
 	}
 	s := createTestServer(t, &filtering.Config{}, forwardConf, nil)
@@ -696,7 +726,7 @@ func TestNullBlockedRequest(t *testing.T) {
 		TCPListenAddrs: []*net.TCPAddr{{}},
 		FilteringConfig: FilteringConfig{
 			ProtectionEnabled: true,
-			BlockingMode:      "null_ip",
+			BlockingMode:      BlockingModeNullIP,
 		},
 	}
 	s := createTestServer(t, &filtering.Config{}, forwardConf, nil)
@@ -749,7 +779,7 @@ func TestBlockedCustomIP(t *testing.T) {
 		TCPListenAddrs: []*net.TCPAddr{{}},
 		FilteringConfig: FilteringConfig{
 			ProtectionEnabled: true,
-			BlockingMode:      "custom_ip",
+			BlockingMode:      BlockingModeCustomIP,
 			BlockingIPv4:      nil,
 			UpstreamDNS:       []string{"8.8.8.8:53", "8.8.4.4:53"},
 		},
@@ -799,6 +829,7 @@ func TestBlockedByHosts(t *testing.T) {
 		TCPListenAddrs: []*net.TCPAddr{{}},
 		FilteringConfig: FilteringConfig{
 			ProtectionEnabled: true,
+			BlockingMode:      BlockingModeDefault,
 		},
 	}
 
@@ -965,15 +996,14 @@ type testDHCP struct{}
 
 func (d *testDHCP) Enabled() (ok bool) { return true }
 
-func (d *testDHCP) Leases(flags int) []dhcpd.Lease {
-	l := dhcpd.Lease{
+func (d *testDHCP) Leases(flags dhcpd.GetLeasesFlags) (leases []*dhcpd.Lease) {
+	return []*dhcpd.Lease{{
 		IP:       net.IP{192, 168, 12, 34},
 		HWAddr:   net.HardwareAddr{0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA},
 		Hostname: "myhost",
-	}
-
-	return []dhcpd.Lease{l}
+	}}
 }
+
 func (d *testDHCP) SetOnLeaseChanged(onLeaseChanged dhcpd.OnLeaseChangedT) {}
 
 func TestPTRResponseFromDHCPLeases(t *testing.T) {

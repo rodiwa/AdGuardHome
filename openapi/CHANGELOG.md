@@ -4,6 +4,16 @@
 
 ## v0.107: API changes
 
+###  Disabling Statistics
+
+* The API `POST /control/stats_config` HTTP API allows disabling statistics by
+  setting `"interval"` to `0`.
+
+### `POST /control/dhcp/reset_leases`
+
+* The new `POST /control/dhcp/reset_leases` HTTP API allows removing all leases
+  from the DHCP server's database without erasing its configuration.
+
 ### The parameter `"host"` in `GET /apple/*.mobileconfig` is now required.
 
 * The parameter `"host"` in `GET` requests for `/apple/doh.mobileconfig` and

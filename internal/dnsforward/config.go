@@ -9,6 +9,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/AdguardTeam/AdGuardHome/internal/aghnet"
 	"github.com/AdguardTeam/AdGuardHome/internal/aghstrings"
@@ -18,6 +19,30 @@ import (
 	"github.com/AdguardTeam/golibs/errors"
 	"github.com/AdguardTeam/golibs/log"
 	"github.com/ameshkov/dnscrypt/v2"
+)
+
+// BlockingMode is an enum of all allowed blocking modes.
+type BlockingMode string
+
+// Allowed blocking modes.
+const (
+	// BlockingModeCustomIP means respond with a custom IP address.
+	BlockingModeCustomIP BlockingMode = "custom_ip"
+
+	// BlockingModeDefault is the same as BlockingModeNullIP for
+	// Adblock-style rules, but responds with the IP address specified in
+	// the rule when blocked by an `/etc/hosts`-style rule.
+	BlockingModeDefault BlockingMode = "default"
+
+	// BlockingModeNullIP means respond with a zero IP address: "0.0.0.0"
+	// for A requests and "::" for AAAA ones.
+	BlockingModeNullIP BlockingMode = "null_ip"
+
+	// BlockingModeNXDOMAIN means respond with the NXDOMAIN code.
+	BlockingModeNXDOMAIN BlockingMode = "nxdomain"
+
+	// BlockingModeREFUSED means respond with the REFUSED code.
+	BlockingModeREFUSED BlockingMode = "refused"
 )
 
 // FilteringConfig represents the DNS filtering configuration of AdGuard Home
@@ -37,11 +62,11 @@ type FilteringConfig struct {
 	// Protection configuration
 	// --
 
-	ProtectionEnabled  bool   `yaml:"protection_enabled"`   // whether or not use any of filtering features
-	BlockingMode       string `yaml:"blocking_mode"`        // mode how to answer filtered requests
-	BlockingIPv4       net.IP `yaml:"blocking_ipv4"`        // IP address to be returned for a blocked A request
-	BlockingIPv6       net.IP `yaml:"blocking_ipv6"`        // IP address to be returned for a blocked AAAA request
-	BlockedResponseTTL uint32 `yaml:"blocked_response_ttl"` // if 0, then default is used (3600)
+	ProtectionEnabled  bool         `yaml:"protection_enabled"`   // whether or not use any of filtering features
+	BlockingMode       BlockingMode `yaml:"blocking_mode"`        // mode how to answer filtered requests
+	BlockingIPv4       net.IP       `yaml:"blocking_ipv4"`        // IP address to be returned for a blocked A request
+	BlockingIPv6       net.IP       `yaml:"blocking_ipv6"`        // IP address to be returned for a blocked AAAA request
+	BlockedResponseTTL uint32       `yaml:"blocked_response_ttl"` // if 0, then default is used (3600)
 
 	// IP (or domain name) which is used to respond to DNS requests blocked by parental control or safe-browsing
 	ParentalBlockHost     string `yaml:"parental_block_host"`
@@ -86,10 +111,12 @@ type FilteringConfig struct {
 	EnableEDNSClientSubnet bool     `yaml:"edns_client_subnet"` // Enable EDNS Client Subnet option
 	MaxGoroutines          uint32   `yaml:"max_goroutines"`     // Max. number of parallel goroutines for processing incoming requests
 
-	// IPSET configuration - add IP addresses of the specified domain names to an ipset list
-	// Syntax:
-	// "DOMAIN[,DOMAIN].../IPSET_NAME"
-	IPSETList []string `yaml:"ipset"`
+	// IpsetList is the ipset configuration that allows AdGuard Home to add
+	// IP addresses of the specified domain names to an ipset list.  Syntax:
+	//
+	//   DOMAIN[,DOMAIN].../IPSET_NAME
+	//
+	IpsetList []string `yaml:"ipset"`
 }
 
 // TLSConfig is the TLS configuration for HTTPS, DNS-over-HTTPS, and DNS-over-TLS
@@ -140,7 +167,10 @@ type ServerConfig struct {
 	FilteringConfig
 	TLSConfig
 	DNSCryptConfig
-	TLSAllowUnencryptedDOH bool
+	TLSAllowUnencryptedDoH bool
+
+	// UpstreamTimeout is the timeout for querying upstream servers.
+	UpstreamTimeout time.Duration
 
 	TLSv12Roots *x509.CertPool // list of root CAs for TLSv1.2
 	TLSCiphers  []uint16       // list of TLS ciphers to use
@@ -261,6 +291,10 @@ func (s *Server) initDefaultSettings() {
 	if len(s.conf.BlockedHosts) == 0 {
 		s.conf.BlockedHosts = defaultBlockedHosts
 	}
+
+	if s.conf.UpstreamTimeout == 0 {
+		s.conf.UpstreamTimeout = DefaultTimeout
+	}
 }
 
 // prepareUpstreamSettings - prepares upstream DNS server settings
@@ -299,7 +333,7 @@ func (s *Server) prepareUpstreamSettings() error {
 		upstreams,
 		upstream.Options{
 			Bootstrap: s.conf.BootstrapDNS,
-			Timeout:   DefaultTimeout,
+			Timeout:   s.conf.UpstreamTimeout,
 		},
 	)
 	if err != nil {
@@ -313,7 +347,7 @@ func (s *Server) prepareUpstreamSettings() error {
 			defaultDNS,
 			upstream.Options{
 				Bootstrap: s.conf.BootstrapDNS,
-				Timeout:   DefaultTimeout,
+				Timeout:   s.conf.UpstreamTimeout,
 			},
 		)
 		if err != nil {

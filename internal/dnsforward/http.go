@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/AdguardTeam/AdGuardHome/internal/aghnet"
 	"github.com/AdguardTeam/AdGuardHome/internal/aghstrings"
@@ -28,21 +29,21 @@ type dnsConfig struct {
 	UpstreamsFile *string   `json:"upstream_dns_file"`
 	Bootstraps    *[]string `json:"bootstrap_dns"`
 
-	ProtectionEnabled *bool     `json:"protection_enabled"`
-	RateLimit         *uint32   `json:"ratelimit"`
-	BlockingMode      *string   `json:"blocking_mode"`
-	BlockingIPv4      net.IP    `json:"blocking_ipv4"`
-	BlockingIPv6      net.IP    `json:"blocking_ipv6"`
-	EDNSCSEnabled     *bool     `json:"edns_cs_enabled"`
-	DNSSECEnabled     *bool     `json:"dnssec_enabled"`
-	DisableIPv6       *bool     `json:"disable_ipv6"`
-	UpstreamMode      *string   `json:"upstream_mode"`
-	CacheSize         *uint32   `json:"cache_size"`
-	CacheMinTTL       *uint32   `json:"cache_ttl_min"`
-	CacheMaxTTL       *uint32   `json:"cache_ttl_max"`
-	ResolveClients    *bool     `json:"resolve_clients"`
-	UsePrivateRDNS    *bool     `json:"use_private_ptr_resolvers"`
-	LocalPTRUpstreams *[]string `json:"local_ptr_upstreams"`
+	ProtectionEnabled *bool         `json:"protection_enabled"`
+	RateLimit         *uint32       `json:"ratelimit"`
+	BlockingMode      *BlockingMode `json:"blocking_mode"`
+	BlockingIPv4      net.IP        `json:"blocking_ipv4"`
+	BlockingIPv6      net.IP        `json:"blocking_ipv6"`
+	EDNSCSEnabled     *bool         `json:"edns_cs_enabled"`
+	DNSSECEnabled     *bool         `json:"dnssec_enabled"`
+	DisableIPv6       *bool         `json:"disable_ipv6"`
+	UpstreamMode      *string       `json:"upstream_mode"`
+	CacheSize         *uint32       `json:"cache_size"`
+	CacheMinTTL       *uint32       `json:"cache_ttl_min"`
+	CacheMaxTTL       *uint32       `json:"cache_ttl_max"`
+	ResolveClients    *bool         `json:"resolve_clients"`
+	UsePrivateRDNS    *bool         `json:"use_private_ptr_resolvers"`
+	LocalPTRUpstreams *[]string     `json:"local_ptr_upstreams"`
 }
 
 func (s *Server) getDNSConfig() dnsConfig {
@@ -125,27 +126,17 @@ func (req *dnsConfig) checkBlockingMode() bool {
 		return true
 	}
 
-	bm := *req.BlockingMode
-	if bm == "custom_ip" {
-		if req.BlockingIPv4.To4() == nil {
-			return false
-		}
-
-		return req.BlockingIPv6 != nil
+	switch bm := *req.BlockingMode; bm {
+	case BlockingModeDefault,
+		BlockingModeREFUSED,
+		BlockingModeNXDOMAIN,
+		BlockingModeNullIP:
+		return true
+	case BlockingModeCustomIP:
+		return req.BlockingIPv4.To4() != nil && req.BlockingIPv6 != nil
+	default:
+		return false
 	}
-
-	for _, valid := range []string{
-		"default",
-		"refused",
-		"nxdomain",
-		"null_ip",
-	} {
-		if bm == valid {
-			return true
-		}
-	}
-
-	return false
 }
 
 func (req *dnsConfig) checkUpstreamsMode() bool {
@@ -529,7 +520,7 @@ func checkPrivateUpstreamExc(u upstream.Upstream) (err error) {
 	return nil
 }
 
-func checkDNS(input string, bootstrap []string, ef excFunc) (err error) {
+func checkDNS(input string, bootstrap []string, timeout time.Duration, ef excFunc) (err error) {
 	if aghstrings.IsCommentOrEmpty(input) {
 		return nil
 	}
@@ -557,7 +548,7 @@ func checkDNS(input string, bootstrap []string, ef excFunc) (err error) {
 	var u upstream.Upstream
 	u, err = upstream.AddressToUpstream(input, upstream.Options{
 		Bootstrap: bootstrap,
-		Timeout:   DefaultTimeout,
+		Timeout:   timeout,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to choose upstream for %q: %w", input, err)
@@ -584,8 +575,9 @@ func (s *Server) handleTestUpstreamDNS(w http.ResponseWriter, r *http.Request) {
 	result := map[string]string{}
 	bootstraps := req.BootstrapDNS
 
+	timeout := s.conf.UpstreamTimeout
 	for _, host := range req.Upstreams {
-		err = checkDNS(host, bootstraps, checkDNSUpstreamExc)
+		err = checkDNS(host, bootstraps, timeout, checkDNSUpstreamExc)
 		if err != nil {
 			log.Info("%v", err)
 			result[host] = err.Error()
@@ -597,7 +589,7 @@ func (s *Server) handleTestUpstreamDNS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, host := range req.PrivateUpstreams {
-		err = checkDNS(host, bootstraps, checkPrivateUpstreamExc)
+		err = checkDNS(host, bootstraps, timeout, checkPrivateUpstreamExc)
 		if err != nil {
 			log.Info("%v", err)
 			// TODO(e.burkov): If passed upstream have already
@@ -629,11 +621,11 @@ func (s *Server) handleTestUpstreamDNS(w http.ResponseWriter, r *http.Request) {
 
 // Control flow:
 // web
-//  -> dnsforward.handleDOH -> dnsforward.ServeHTTP
+//  -> dnsforward.handleDoH -> dnsforward.ServeHTTP
 //  -> proxy.ServeHTTP -> proxy.handleDNSRequest
 //  -> dnsforward.handleDNSRequest
-func (s *Server) handleDOH(w http.ResponseWriter, r *http.Request) {
-	if !s.conf.TLSAllowUnencryptedDOH && r.TLS == nil {
+func (s *Server) handleDoH(w http.ResponseWriter, r *http.Request) {
+	if !s.conf.TLSAllowUnencryptedDoH && r.TLS == nil {
 		httpError(r, w, http.StatusNotFound, "Not Found")
 		return
 	}
@@ -661,6 +653,6 @@ func (s *Server) registerHandlers() {
 	// See go doc net/http.ServeMux.
 	//
 	// See also https://github.com/AdguardTeam/AdGuardHome/issues/2628.
-	s.conf.HTTPRegister("", "/dns-query", s.handleDOH)
-	s.conf.HTTPRegister("", "/dns-query/", s.handleDOH)
+	s.conf.HTTPRegister("", "/dns-query", s.handleDoH)
+	s.conf.HTTPRegister("", "/dns-query/", s.handleDoH)
 }

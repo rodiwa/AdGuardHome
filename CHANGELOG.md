@@ -15,7 +15,13 @@ and this project adheres to
 
 ### Added
 
-- The ability to change group and user ID on startup on Unix ([#2763]).
+- RFC 9000 support in DNS-over-QUIC.
+- Completely disabling statistics by setting the statistics interval to zero
+  ([#2141]).
+- The ability to completely purge DHCP leases ([#1691]).
+- Settable timeouts for querying the upstream servers ([#2280]).
+- Configuration file parameters to change group and user ID on startup on Unix
+  ([#2763]).
 - Experimental OpenBSD support for AMD64 and 64-bit ARM CPUs ([#2439]).
 - Support for custom port in DNS-over-HTTPS profiles for Apple's devices
   ([#3172]).
@@ -32,6 +38,8 @@ and this project adheres to
 
 ### Changed
 
+- When /etc/hosts-type rules have several IPs for one host, all IPs are now
+  returned instead of only the first one ([#1381]).
 - The setting `rlimit_nofile` is now in the `os` block of the configuration
   file, together with the new `group` and `user` settings ([#2763]).
 - Permissions on filter files are now `0o644` instead of `0o600` ([#3198]).
@@ -47,6 +55,8 @@ released by then.
 
 ### Fixed
 
+- Occasional breakages on network errors with DNS-over-HTTP upstreams ([#3217]).
+- Errors when setting static IP on Linux ([#3257]).
 - Treatment of domain names and FQDNs in custom rules with `$dnsrewrite` that
   use the `PTR` type ([#3256]).
 - Redundant hostname generating while loading static leases with empty hostname
@@ -60,6 +70,10 @@ released by then.
 
 - Go 1.15 support.
 
+[#1381]: https://github.com/AdguardTeam/AdGuardHome/issues/1381
+[#1691]: https://github.com/AdguardTeam/AdGuardHome/issues/1691
+[#2141]: https://github.com/AdguardTeam/AdGuardHome/issues/2141
+[#2280]: https://github.com/AdguardTeam/AdGuardHome/issues/2280
 [#2439]: https://github.com/AdguardTeam/AdGuardHome/issues/2439
 [#2441]: https://github.com/AdguardTeam/AdGuardHome/issues/2441
 [#2443]: https://github.com/AdguardTeam/AdGuardHome/issues/2443
@@ -72,7 +86,9 @@ released by then.
 [#3186]: https://github.com/AdguardTeam/AdGuardHome/issues/3186
 [#3194]: https://github.com/AdguardTeam/AdGuardHome/issues/3194
 [#3198]: https://github.com/AdguardTeam/AdGuardHome/issues/3198
+[#3217]: https://github.com/AdguardTeam/AdGuardHome/issues/3217
 [#3256]: https://github.com/AdguardTeam/AdGuardHome/issues/3256
+[#3257]: https://github.com/AdguardTeam/AdGuardHome/issues/3257
 
 
 

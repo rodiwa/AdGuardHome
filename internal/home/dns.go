@@ -95,7 +95,7 @@ func initDNSServer() error {
 	}
 
 	Context.rdns = NewRDNS(Context.dnsServer, &Context.clients, config.DNS.UsePrivateRDNS)
-	Context.whois = initWhois(&Context.clients)
+	Context.whois = initWHOIS(&Context.clients)
 
 	Context.filters.Init()
 	return nil
@@ -194,7 +194,7 @@ func generateServerConfig() (newConf dnsforward.ServerConfig, err error) {
 
 	newConf.TLSv12Roots = Context.tlsRoots
 	newConf.TLSCiphers = Context.tlsCiphers
-	newConf.TLSAllowUnencryptedDOH = tlsConf.AllowUnencryptedDOH
+	newConf.TLSAllowUnencryptedDoH = tlsConf.AllowUnencryptedDoH
 
 	newConf.FilterHandler = applyAdditionalFiltering
 	newConf.GetCustomUpstreamByClient = Context.clients.findUpstreams
@@ -202,6 +202,7 @@ func generateServerConfig() (newConf dnsforward.ServerConfig, err error) {
 	newConf.ResolveClients = dnsConf.ResolveClients
 	newConf.UsePrivateRDNS = dnsConf.UsePrivateRDNS
 	newConf.LocalPTRResolvers = dnsConf.LocalPTRResolvers
+	newConf.UpstreamTimeout = dnsConf.UpstreamTimeout.Duration
 
 	return newConf, nil
 }
