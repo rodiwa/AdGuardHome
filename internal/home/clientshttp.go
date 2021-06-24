@@ -44,7 +44,7 @@ type clientJSON struct {
 type runtimeClientJSON struct {
 	WHOISInfo *RuntimeClientWHOISInfo `json:"whois_info"`
 
-	IP     string `json:"ip"`
+	IP     net.IP `json:"ip"`
 	Name   string `json:"name"`
 	Source string `json:"source"`
 }
@@ -66,7 +66,9 @@ func (clients *clientsContainer) handleGetClients(w http.ResponseWriter, _ *http
 		cj := clientToJSON(c)
 		data.Clients = append(data.Clients, cj)
 	}
-	for ip, rc := range clients.ipToRC {
+
+	clients.ipToRC.Range(func(ip net.IP, v interface{}) (cont bool) {
+		rc, _ := v.(*RuntimeClient)
 		cj := runtimeClientJSON{
 			IP:        ip,
 			Name:      rc.Host,
@@ -86,7 +88,9 @@ func (clients *clientsContainer) handleGetClients(w http.ResponseWriter, _ *http
 		}
 
 		data.RuntimeClients = append(data.RuntimeClients, cj)
-	}
+
+		return true
+	})
 
 	data.Tags = clientTags
 
@@ -139,7 +143,7 @@ func clientToJSON(c *Client) clientJSON {
 }
 
 // runtimeClientToJSON converts a RuntimeClient into a JSON struct.
-func runtimeClientToJSON(ip string, rc RuntimeClient) (cj clientJSON) {
+func runtimeClientToJSON(ip string, rc *RuntimeClient) (cj clientJSON) {
 	cj = clientJSON{
 		Name:      rc.Host,
 		IDs:       []string{ip},
@@ -271,7 +275,7 @@ func (clients *clientsContainer) findRuntime(ip net.IP, idStr string) (cj client
 		return cj, false
 	}
 
-	rc, ok := clients.FindRuntimeClient(idStr)
+	rc, ok := clients.FindRuntimeClient(ip)
 	if !ok {
 		// It is still possible that the IP used to be in the runtime
 		// clients list, but then the server was reloaded.  So, check

@@ -11,18 +11,33 @@ import (
 	"github.com/miekg/dns"
 )
 
-func (s *Server) beforeRequestHandler(_ *proxy.Proxy, d *proxy.DNSContext) (bool, error) {
-	ip := aghnet.IPFromAddr(d.Addr)
-	disallowed, _ := s.access.IsBlockedIP(ip)
-	if disallowed {
-		log.Tracef("Client IP %s is blocked by settings", ip)
+func (s *Server) beforeRequestHandler(_ *proxy.Proxy, pctx *proxy.DNSContext) (bool, error) {
+	ip := aghnet.IPFromAddr(pctx.Addr)
+	clientID, err := s.clientIDFromDNSContext(pctx)
+	if err != nil {
+		return false, fmt.Errorf("getting clientid: %w", err)
+	}
+
+	allowlistMode := s.access.AllowlistMode()
+	blockedByIP, _ := s.access.IsBlockedIP(ip)
+	blockedByClientID := s.access.IsBlockedClientID(clientID)
+
+	// Allow if at least one of the checks allows in allowlist mode, but
+	// block if at least one of the checks blocks in blocklist mode.
+	if allowlistMode && blockedByIP && blockedByClientID {
+		log.Debug("client %s (id %q) is not in access allowlist", ip, clientID)
+
+		return false, nil
+	} else if !allowlistMode && (blockedByIP || blockedByClientID) {
+		log.Debug("client %s (id %q) is in access blocklist", ip, clientID)
+
 		return false, nil
 	}
 
-	if len(d.Req.Question) == 1 {
-		host := strings.TrimSuffix(d.Req.Question[0].Name, ".")
-		if s.access.IsBlockedDomain(host) {
-			log.Tracef("domain %s is blocked by access settings", host)
+	if len(pctx.Req.Question) == 1 {
+		host := strings.TrimSuffix(pctx.Req.Question[0].Name, ".")
+		if s.access.IsBlockedHost(host) {
+			log.Debug("host %s is in access blocklist", host)
 
 			return false, nil
 		}

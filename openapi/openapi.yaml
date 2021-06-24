@@ -2349,17 +2349,19 @@
       'description': 'Client and host access list'
       'properties':
         'allowed_clients':
-          'description': 'Allowlist of clients.'
+          'description': >
+            The allowlist of clients: IP addresses, CIDRs, or client IDs.
           'items':
             'type': 'string'
           'type': 'array'
         'disallowed_clients':
-          'description': 'Blocklist of clients.'
+          'description': >
+            The blocklist of clients: IP addresses, CIDRs, or client IDs.
           'items':
             'type': 'string'
           'type': 'array'
         'blocked_hosts':
-          'description': 'Blocklist of hosts.'
+          'description': 'The blocklist of hosts.'
           'items':
             'type': 'string'
           'type': 'array'
