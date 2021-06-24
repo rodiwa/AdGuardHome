@@ -12,8 +12,10 @@ import (
 	"strings"
 
 	"github.com/AdguardTeam/AdGuardHome/internal/aghio"
+	"github.com/AdguardTeam/AdGuardHome/internal/aghos"
 	"github.com/AdguardTeam/golibs/errors"
 	"github.com/google/renameio/maybe"
+	"golang.org/x/sys/unix"
 )
 
 // maxConfigFileSize is the maximum assumed length of the interface
@@ -66,6 +68,14 @@ func ifaceHasStaticIP(ifaceName string) (has bool, err error) {
 	}
 
 	return false, ErrNoStaticIPInfo
+}
+
+func canBindPrivilegedPorts() (can bool, err error) {
+	cnbs, err := unix.PrctlRetInt(unix.PR_CAP_AMBIENT, unix.PR_CAP_AMBIENT_IS_SET, unix.CAP_NET_BIND_SERVICE, 0, 0)
+	// Don't check the error because it's always nil on Linux.
+	adm, _ := aghos.HaveAdminRights()
+
+	return cnbs == 1 || adm, err
 }
 
 // findIfaceLine scans s until it finds the line that declares an interface with
