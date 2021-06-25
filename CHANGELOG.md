@@ -15,7 +15,7 @@ and this project adheres to
 
 ### Added
 
-- Blocking access using client IDs ([#2624]).
+- Blocking access using client IDs ([#2624], [#3162]).
 - RFC 9000 support in DNS-over-QUIC.
 - Completely disabling statistics by setting the statistics interval to zero
   ([#2141]).
@@ -81,6 +81,7 @@ released by then.
 [#2624]: https://github.com/AdguardTeam/AdGuardHome/issues/2624
 [#2763]: https://github.com/AdguardTeam/AdGuardHome/issues/2763
 [#3136]: https://github.com/AdguardTeam/AdGuardHome/issues/3136
+[#3162]: https://github.com/AdguardTeam/AdGuardHome/issues/3162
 [#3166]: https://github.com/AdguardTeam/AdGuardHome/issues/3166
 [#3172]: https://github.com/AdguardTeam/AdGuardHome/issues/3172
 [#3184]: https://github.com/AdguardTeam/AdGuardHome/issues/3184
