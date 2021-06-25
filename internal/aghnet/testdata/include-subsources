@@ -1,8 +1,5 @@
-# Including the subsource.
+# The "testdata" part is added here because the test is actually run from the
+# parent directory.  Real interface files usually contain only absolute paths.
+
 source ./testdata/ifaces
-
-# Including subsource wildcard.
 source ./testdata/*
-
-# ./testdata is the path to the current directory relative to the *_test.go.
-# Real interfaces configuration files are usually contain only absolute paths.

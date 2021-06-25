@@ -13,7 +13,7 @@ import (
 )
 
 func TestRecurrentChecker(t *testing.T) {
-	c := recurrentChecker{
+	c := &recurrentChecker{
 		checker:  ifacesStaticConfig,
 		initPath: "./testdata/include-subsources",
 	}
@@ -101,7 +101,7 @@ func TestIfacesStaticConfig(t *testing.T) {
 		want:         true,
 		wantPatterns: []string{},
 	}, {
-		name: "return_subsources",
+		name: "return_patterns",
 		data: []byte(`source hello` + nl +
 			`source world` + nl +
 			`#iface enp0s3 inet static` + nl,
@@ -109,7 +109,9 @@ func TestIfacesStaticConfig(t *testing.T) {
 		want:         false,
 		wantPatterns: []string{"hello", "world"},
 	}, {
-		name: "ignore_subsources",
+		// This one tests if the first found valid interface prevents
+		// checking files under the `source` directive.
+		name: "ignore_patterns",
 		data: []byte(`source hello` + nl +
 			`source world` + nl +
 			`iface enp0s3 inet static` + nl,

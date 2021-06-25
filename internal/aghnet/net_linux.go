@@ -20,16 +20,25 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// recurrentChecker is used to check all the files which may include references
+// for other ones.
 type recurrentChecker struct {
-	checker  func(r io.Reader, ifaceName string) (patterns []string, has bool, err error)
+	// checker is the function to check if r's stream contains the desired
+	// attribute.  It must return all the patterns for files which should
+	// also be checked and each of them should be valid for filepath.Glob
+	// function.
+	checker func(r io.Reader, desired string) (patterns []string, has bool, err error)
+	// initPath is the path of the first member in the sequence of checked
+	// files.
 	initPath string
 }
 
-// maxConfigFileSize is the maximum assumed length of the interfaces
-// configuration file.
-const maxConfigFileSize = 1024 * 1024
+// maxCheckedFileSize is the maximum length of the file that recurrentChecker
+// may check.
+const maxCheckedFileSize = 1024 * 1024
 
-func (rc recurrentChecker) checkFile(sourcePath, ifaceName string) (
+// checkFile tries to open and to check single file located on the sourcePath.
+func (rc *recurrentChecker) checkFile(sourcePath, desired string) (
 	subsources []string,
 	has bool,
 	err error,
@@ -40,17 +49,15 @@ func (rc recurrentChecker) checkFile(sourcePath, ifaceName string) (
 		return nil, false, err
 	}
 
-	err = nil
-
 	defer func() { err = errors.WithDeferred(err, f.Close()) }()
 
-	var fileReader io.Reader
-	fileReader, err = aghio.LimitReader(f, maxConfigFileSize)
+	var r io.Reader
+	r, err = aghio.LimitReader(f, maxCheckedFileSize)
 	if err != nil {
 		return nil, false, err
 	}
 
-	subsources, has, err = rc.checker(fileReader, ifaceName)
+	subsources, has, err = rc.checker(r, desired)
 	if err != nil {
 		return nil, false, err
 	}
@@ -62,7 +69,8 @@ func (rc recurrentChecker) checkFile(sourcePath, ifaceName string) (
 	return subsources, has, nil
 }
 
-func (rc recurrentChecker) handlePatterns(sourcesSet *aghstrings.Set, patterns []string) (
+// handlePatterns parses the patterns and takes care of duplicates.
+func (rc *recurrentChecker) handlePatterns(sourcesSet *aghstrings.Set, patterns []string) (
 	subsources []string,
 	err error,
 ) {
@@ -87,7 +95,8 @@ func (rc recurrentChecker) handlePatterns(sourcesSet *aghstrings.Set, patterns [
 	return subsources, nil
 }
 
-func (rc recurrentChecker) check(ifaceName string) (has bool, err error) {
+// check walks through all the files searching for the desired attribute.
+func (rc *recurrentChecker) check(desired string) (has bool, err error) {
 	var i int
 	sources := []string{rc.initPath}
 
@@ -103,7 +112,7 @@ func (rc recurrentChecker) check(ifaceName string) (has bool, err error) {
 	// The slice of sources is separate from the set of sources to keep the
 	// order in which the files are walked.
 	for sourcesSet := aghstrings.NewSet(rc.initPath); i < len(sources); i++ {
-		patterns, has, err = rc.checkFile(sources[i], ifaceName)
+		patterns, has, err = rc.checkFile(sources[i], desired)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				continue
@@ -133,7 +142,7 @@ func ifaceHasStaticIP(ifaceName string) (has bool, err error) {
 	// /etc/network/interfaces doesn't, it will return true.  Perhaps this
 	// is not the most desirable behavior.
 
-	for _, rc := range []recurrentChecker{{
+	for _, rc := range []*recurrentChecker{{
 		checker:  dhcpcdStaticConfig,
 		initPath: "/etc/dhcpcd.conf",
 	}, {
