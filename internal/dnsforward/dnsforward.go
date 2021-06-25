@@ -27,6 +27,11 @@ import (
 // DefaultTimeout is the default upstream timeout
 const DefaultTimeout = 10 * time.Second
 
+// defaultClientIDCacheCount is the default count of items in the LRU client ID
+// cache.  The assumption here is that there won't be more than this many
+// requests between the BeforeRequestHandler stage and the actual processing.
+const defaultClientIDCacheCount = 1024
+
 const (
 	safeBrowsingBlockHost = "standard-block.dns.adguard.com"
 	parentalBlockHost     = "family-block.dns.adguard.com"
@@ -153,10 +158,7 @@ func NewServer(p DNSCreateParams) (s *Server, err error) {
 		recDetector:       newRecursionDetector(recursionTTL, cachedRecurrentReqNum),
 		clientIDCache: cache.New(cache.Config{
 			EnableLRU: true,
-			// Assume that there won't be more than this many
-			// requests between the BeforeRequestHandler stage and
-			// the actual processing.
-			MaxCount: 1024,
+			MaxCount:  defaultClientIDCacheCount,
 		}),
 	}
 

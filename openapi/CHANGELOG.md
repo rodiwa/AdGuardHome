@@ -4,9 +4,14 @@
 
 ## v0.107: API changes
 
+###  Client IDs in Access Settings
+
+* The `POST /control/access/set` HTTP API now accepts client IDs in
+  `"allowed_clients"` and `"disallowed_clients"` fields.
+
 ###  Disabling Statistics
 
-* The API `POST /control/stats_config` HTTP API allows disabling statistics by
+* The `POST /control/stats_config` HTTP API allows disabling statistics by
   setting `"interval"` to `0`.
 
 ### `POST /control/dhcp/reset_leases`

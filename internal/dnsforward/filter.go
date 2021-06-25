@@ -1,6 +1,7 @@
 package dnsforward
 
 import (
+	"encoding/binary"
 	"fmt"
 	"strings"
 
@@ -11,7 +12,13 @@ import (
 	"github.com/miekg/dns"
 )
 
-func (s *Server) beforeRequestHandler(_ *proxy.Proxy, pctx *proxy.DNSContext) (bool, error) {
+// beforeRequestHandler is the handler that is called before any other
+// processing, including logs.  It performs access checks and puts the client
+// ID, if there is one, into the server's cache.
+func (s *Server) beforeRequestHandler(
+	_ *proxy.Proxy,
+	pctx *proxy.DNSContext,
+) (reply bool, err error) {
 	ip := aghnet.IPFromAddr(pctx.Addr)
 	clientID, err := s.clientIDFromDNSContext(pctx)
 	if err != nil {
@@ -41,6 +48,12 @@ func (s *Server) beforeRequestHandler(_ *proxy.Proxy, pctx *proxy.DNSContext) (b
 
 			return false, nil
 		}
+	}
+
+	if clientID != "" {
+		key := [8]byte{}
+		binary.BigEndian.PutUint64(key[:], pctx.RequestID)
+		s.clientIDCache.Set(key[:], []byte(clientID))
 	}
 
 	return true, nil

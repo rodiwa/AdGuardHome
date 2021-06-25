@@ -1954,10 +1954,7 @@
         'disallowed_rule':
           'type': 'string'
           'description': >
-            The rule due to which the client is disallowed.  If disallowed is
-            set to true, and this string is empty, then the client IP is
-            disallowed by the "allowed IP list", that is it is not included in
-            the allowed list.
+            The rule due to which the client is allowed or blocked.
         'name':
           'description': >
             Persistent client's name or an empty string if this is a runtime

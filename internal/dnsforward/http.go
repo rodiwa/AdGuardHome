@@ -546,13 +546,10 @@ func checkDNS(input string, bootstrap []string, timeout time.Duration, ef excFun
 
 	log.Debug("checking if dns server %q works...", input)
 	var u upstream.Upstream
-	u, err = upstream.AddressToUpstream(
-		input,
-		&upstream.Options{
-			Bootstrap: bootstrap,
-			Timeout:   timeout,
-		},
-	)
+	u, err = upstream.AddressToUpstream(input, &upstream.Options{
+		Bootstrap: bootstrap,
+		Timeout:   timeout,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to choose upstream for %q: %w", input, err)
 	}

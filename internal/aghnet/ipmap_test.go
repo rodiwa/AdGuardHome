@@ -5,7 +5,38 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestIPMap_allocs(t *testing.T) {
+	ip4 := net.IP{1, 2, 3, 4}
+	m := NewIPMap(0)
+	m.Set(ip4, 42)
+
+	t.Run("get", func(t *testing.T) {
+		var v interface{}
+		var ok bool
+		allocs := testing.AllocsPerRun(100, func() {
+			v, ok = m.Get(ip4)
+		})
+
+		require.True(t, ok)
+		require.Equal(t, 42, v)
+
+		assert.Equal(t, float64(0), allocs)
+	})
+
+	t.Run("len", func(t *testing.T) {
+		var n int
+		allocs := testing.AllocsPerRun(100, func() {
+			n = m.Len()
+		})
+
+		require.Equal(t, 1, n)
+
+		assert.Equal(t, float64(0), allocs)
+	})
+}
 
 func TestIPMap(t *testing.T) {
 	ip4 := net.IP{1, 2, 3, 4}

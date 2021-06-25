@@ -18,10 +18,11 @@ type IPMap struct {
 	m map[ipArr]interface{}
 }
 
-// NewIPMap returns a new empty IP map.
-func NewIPMap(n int) (m *IPMap) {
+// NewIPMap returns a new empty IP map using hint as a size hint for the
+// underlying map.
+func NewIPMap(hint int) (m *IPMap) {
 	return &IPMap{
-		m: make(map[ipArr]interface{}, n),
+		m: make(map[ipArr]interface{}, hint),
 	}
 }
 
@@ -65,7 +66,7 @@ func (m *IPMap) Len() (n int) {
 }
 
 // Range calls f for each key and value present in the map in an undefined
-// order. If cont is false, range stops the iteration.  Calling Range on a nil
+// order.  If cont is false, range stops the iteration.  Calling Range on a nil
 // *IPMap has no effect, just like ranging over a nil map.
 func (m *IPMap) Range(f func(ip net.IP, v interface{}) (cont bool)) {
 	if m == nil {
@@ -107,5 +108,5 @@ func (m *IPMap) String() (s string) {
 		return "<nil>"
 	}
 
-	return fmt.Sprintf("%v", m.m)
+	return fmt.Sprint(m.m)
 }
