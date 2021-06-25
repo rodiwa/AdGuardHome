@@ -9,18 +9,123 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/AdguardTeam/AdGuardHome/internal/aghio"
 	"github.com/AdguardTeam/AdGuardHome/internal/aghos"
+	"github.com/AdguardTeam/AdGuardHome/internal/aghstrings"
 	"github.com/AdguardTeam/golibs/errors"
 	"github.com/google/renameio/maybe"
 	"golang.org/x/sys/unix"
 )
 
-// maxConfigFileSize is the maximum assumed length of the interface
+type recurrentChecker struct {
+	checker  func(r io.Reader, ifaceName string) (patterns []string, has bool, err error)
+	initPath string
+}
+
+// maxConfigFileSize is the maximum assumed length of the interfaces
 // configuration file.
 const maxConfigFileSize = 1024 * 1024
+
+func (rc recurrentChecker) checkFile(sourcePath, ifaceName string) (
+	subsources []string,
+	has bool,
+	err error,
+) {
+	var f *os.File
+	f, err = os.Open(sourcePath)
+	if err != nil {
+		return nil, false, err
+	}
+
+	err = nil
+
+	defer func() { err = errors.WithDeferred(err, f.Close()) }()
+
+	var fileReader io.Reader
+	fileReader, err = aghio.LimitReader(f, maxConfigFileSize)
+	if err != nil {
+		return nil, false, err
+	}
+
+	subsources, has, err = rc.checker(fileReader, ifaceName)
+	if err != nil {
+		return nil, false, err
+	}
+
+	if has {
+		return nil, true, nil
+	}
+
+	return subsources, has, nil
+}
+
+func (rc recurrentChecker) handlePatterns(sourcesSet *aghstrings.Set, patterns []string) (
+	subsources []string,
+	err error,
+) {
+	subsources = make([]string, 0, len(patterns))
+	for _, p := range patterns {
+		var matches []string
+		matches, err = filepath.Glob(p)
+		if err != nil {
+			return nil, fmt.Errorf("invalid pattern %q: %w", p, err)
+		}
+
+		for _, m := range matches {
+			if sourcesSet.Has(m) {
+				continue
+			}
+
+			sourcesSet.Add(m)
+			subsources = append(subsources, m)
+		}
+	}
+
+	return subsources, nil
+}
+
+func (rc recurrentChecker) check(ifaceName string) (has bool, err error) {
+	var i int
+	sources := []string{rc.initPath}
+
+	defer func() {
+		if i >= len(sources) {
+			return
+		}
+
+		err = errors.Annotate(err, "checking %q: %w", sources[i])
+	}()
+
+	var patterns, subsources []string
+	// The slice of sources is separate from the set of sources to keep the
+	// order in which the files are walked.
+	for sourcesSet := aghstrings.NewSet(rc.initPath); i < len(sources); i++ {
+		patterns, has, err = rc.checkFile(sources[i], ifaceName)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+
+			return false, err
+		}
+
+		if has {
+			return true, nil
+		}
+
+		subsources, err = rc.handlePatterns(sourcesSet, patterns)
+		if err != nil {
+			return false, err
+		}
+
+		sources = append(sources, subsources...)
+	}
+
+	return false, nil
+}
 
 func ifaceHasStaticIP(ifaceName string) (has bool, err error) {
 	// TODO(a.garipov): Currently, this function returns the first
@@ -28,43 +133,21 @@ func ifaceHasStaticIP(ifaceName string) (has bool, err error) {
 	// /etc/network/interfaces doesn't, it will return true.  Perhaps this
 	// is not the most desirable behavior.
 
-	for _, check := range []struct {
-		checker  func(io.Reader, string) (bool, error)
-		filePath string
-	}{{
+	for _, rc := range []recurrentChecker{{
 		checker:  dhcpcdStaticConfig,
-		filePath: "/etc/dhcpcd.conf",
+		initPath: "/etc/dhcpcd.conf",
 	}, {
 		checker:  ifacesStaticConfig,
-		filePath: "/etc/network/interfaces",
+		initPath: "/etc/network/interfaces",
 	}} {
-		var f *os.File
-		f, err = os.Open(check.filePath)
-		if err != nil {
-			// ErrNotExist can happen here if there is no such file.
-			// This is normal, as not every system uses those files.
-			if errors.Is(err, os.ErrNotExist) {
-				err = nil
-
-				continue
-			}
-
-			return false, err
-		}
-		defer func() { err = errors.WithDeferred(err, f.Close()) }()
-
-		var fileReader io.Reader
-		fileReader, err = aghio.LimitReader(f, maxConfigFileSize)
+		has, err = rc.check(ifaceName)
 		if err != nil {
 			return false, err
 		}
 
-		has, err = check.checker(fileReader, ifaceName)
-		if err != nil {
-			return false, err
+		if has {
+			return true, nil
 		}
-
-		return has, nil
 	}
 
 	return false, ErrNoStaticIPInfo
@@ -94,11 +177,11 @@ func findIfaceLine(s *bufio.Scanner, name string) (ok bool) {
 
 // dhcpcdStaticConfig checks if interface is configured by /etc/dhcpcd.conf to
 // have a static IP.
-func dhcpcdStaticConfig(r io.Reader, ifaceName string) (has bool, err error) {
+func dhcpcdStaticConfig(r io.Reader, ifaceName string) (subsources []string, has bool, err error) {
 	s := bufio.NewScanner(r)
 	ifaceFound := findIfaceLine(s, ifaceName)
 	if !ifaceFound {
-		return false, s.Err()
+		return nil, false, s.Err()
 	}
 
 	for s.Scan() {
@@ -107,7 +190,7 @@ func dhcpcdStaticConfig(r io.Reader, ifaceName string) (has bool, err error) {
 		if len(fields) >= 2 &&
 			fields[0] == "static" &&
 			strings.HasPrefix(fields[1], "ip_address=") {
-			return true, s.Err()
+			return nil, true, s.Err()
 		}
 
 		if len(fields) > 0 && fields[0] == "interface" {
@@ -116,29 +199,41 @@ func dhcpcdStaticConfig(r io.Reader, ifaceName string) (has bool, err error) {
 		}
 	}
 
-	return false, s.Err()
+	return nil, false, s.Err()
 }
 
-// ifacesStaticConfig checks if interface is configured by
-// /etc/network/interfaces to have a static IP.
-func ifacesStaticConfig(r io.Reader, ifaceName string) (has bool, err error) {
+// ifacesStaticConfig checks if the interface is configured by any file of
+// /etc/network/interfaces format to have a static IP.
+func ifacesStaticConfig(r io.Reader, ifaceName string) (subsources []string, has bool, err error) {
 	s := bufio.NewScanner(r)
 	for s.Scan() {
 		line := strings.TrimSpace(s.Text())
-
-		if len(line) == 0 || line[0] == '#' {
+		if aghstrings.IsCommentOrEmpty(line) {
 			continue
 		}
 
+		// TODO(e.burkov): As man page interfaces(5) says, a line may be
+		// extended across multiple lines by making the last character a
+		// backslash.  Provide extended lines and "source-directory"
+		// stanzas support.
+
 		fields := strings.Fields(line)
+		fieldsNum := len(fields)
+
 		// Man page interfaces(5) declares that interface definition
 		// should consist of the key word "iface" followed by interface
 		// name, and method at fourth field.
-		if len(fields) >= 4 && fields[0] == "iface" && fields[1] == ifaceName && fields[3] == "static" {
-			return true, nil
+		if fieldsNum >= 4 &&
+			fields[0] == "iface" && fields[1] == ifaceName && fields[3] == "static" {
+			return nil, true, nil
+		}
+
+		if fieldsNum >= 2 && fields[0] == "source" {
+			subsources = append(subsources, fields[1])
 		}
 	}
-	return false, s.Err()
+
+	return subsources, false, s.Err()
 }
 
 // ifaceSetStaticIP configures the system to retain its current IP on the
